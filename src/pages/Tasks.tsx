@@ -16,8 +16,15 @@ export default function Tasks() {
 
   const fetchTasks = async () => {
     try {
+      setLoading(true);
       const status = filter === "ALL" ? undefined : filter;
-      const data = await taskService.getTasks(status);
+      
+      // Asegurar que el skeleton se muestre al menos 500ms
+      const [data] = await Promise.all([
+        taskService.getTasks(status),
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
+      
       setTasks(data);
     } catch (error) {
       console.error("Error fetching tasks:", error);
