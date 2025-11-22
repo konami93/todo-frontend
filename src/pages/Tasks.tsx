@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { taskService } from "../services/api";
 import type { Task } from "../types";
@@ -8,39 +8,60 @@ import TaskSkeleton from "../components/TaskSkeleton";
 
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [filterLoading, setFilterLoading] = useState(false);
   const [filter, setFilter] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const { user, logout } = useAuth();
 
-  const fetchTasks = async () => {
+  const isFirstLoad = useRef(true);
+
+  const fetchTasks = async (isInitialLoad = false) => {
     try {
-      setLoading(true);
+      if (isInitialLoad) {
+        setInitialLoading(true);
+      } else {
+        setFilterLoading(true);
+      }
       const status = filter === "ALL" ? undefined : filter;
-      
-      // Asegurar que el skeleton se muestre al menos 500ms
+
       const [data] = await Promise.all([
         taskService.getTasks(status),
-        new Promise(resolve => setTimeout(resolve, 500))
+        new Promise((resolve) => setTimeout(resolve, 500)),
       ]);
-      
+
       setTasks(data);
     } catch (error) {
       console.error("Error fetching tasks:", error);
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setInitialLoading(false);
+      } else {
+        setFilterLoading(false);
+      }
     }
   };
 
+  // Carga inicial
   useEffect(() => {
-    fetchTasks();
+    if (isFirstLoad.current) {
+      fetchTasks(true);
+      isFirstLoad.current = false;
+    }
+  }, []);
+
+  // Cuando cambia el filtro (después de la carga inicial)
+  useEffect(() => {
+    if (!isFirstLoad.current) {
+      fetchTasks(false);
+    }
   }, [filter]);
 
   const handleCreateTask = async (taskData: Partial<Task>) => {
     try {
       await taskService.createTask(taskData);
-      fetchTasks();
+      fetchTasks(false);
       setShowForm(false);
     } catch (error) {
       console.error("Error creating task:", error);
@@ -50,7 +71,7 @@ export default function Tasks() {
   const handleUpdateTask = async (id: string, taskData: Partial<Task>) => {
     try {
       await taskService.updateTask(id, taskData);
-      fetchTasks();
+      fetchTasks(false);
       setEditingTask(null);
     } catch (error) {
       console.error("Error updating task:", error);
@@ -62,18 +83,41 @@ export default function Tasks() {
 
     try {
       await taskService.deleteTask(id);
-      fetchTasks();
+      fetchTasks(false);
     } catch (error) {
       console.error("Error deleting task:", error);
     }
   };
 
   const handleToggleStatus = async (task: Task) => {
-    const newStatus = task.status === "PENDING" ? "COMPLETED" : "PENDING";
-    await handleUpdateTask(task.id, { status: newStatus });
+    const newStatus: "PENDING" | "COMPLETED" =
+      task.status === "PENDING" ? "COMPLETED" : "PENDING";
+    try {
+      // Actualizar el estado local inmediatamente para mejor UX
+      setTasks((prevTasks) => {
+        const updatedTasks = prevTasks.map((t) =>
+          t.id === task.id ? { ...t, status: newStatus } : t
+        );
+        // Si hay un filtro activo y la tarea ya no coincide, removerla del listado
+        if (filter !== "ALL" && newStatus !== filter) {
+          return updatedTasks.filter((t) => t.id !== task.id);
+        }
+        return updatedTasks;
+      });
+      // Enviar la actualización al servidor
+      await taskService.updateTask(task.id, { status: newStatus });
+    } catch (error) {
+      // Si hay error, revertir el cambio local
+      console.error("Error updating task status:", error);
+      setTasks((prevTasks) =>
+        prevTasks.map((t) =>
+          t.id === task.id ? { ...t, status: task.status } : t
+        )
+      );
+    }
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <nav className="bg-white shadow-sm">
@@ -201,12 +245,20 @@ export default function Tasks() {
             />
           )}
 
-          <TaskList
-            tasks={tasks}
-            onEdit={setEditingTask}
-            onDelete={handleDeleteTask}
-            onToggleStatus={handleToggleStatus}
-          />
+          {filterLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, index) => (
+                <TaskSkeleton key={index} />
+              ))}
+            </div>
+          ) : (
+            <TaskList
+              tasks={tasks}
+              onEdit={setEditingTask}
+              onDelete={handleDeleteTask}
+              onToggleStatus={handleToggleStatus}
+            />
+          )}
         </div>
       </main>
     </div>
