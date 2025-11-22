@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { taskService } from "../services/api";
-import type { Task } from "../types";
+import type { Task, TaskStatistics } from "../types";
 import TaskList from "../components/TaskList";
 import TaskForm from "../components/TaskForm";
 import TaskSkeleton from "../components/TaskSkeleton";
 
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [statistics, setStatistics] = useState<TaskStatistics>({
+    total: 0,
+    completed: 0,
+    pending: 0,
+  });
   const [initialLoading, setInitialLoading] = useState(true);
   const [filterLoading, setFilterLoading] = useState(false);
   const [filter, setFilter] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
@@ -26,12 +31,16 @@ export default function Tasks() {
       }
       const status = filter === "ALL" ? undefined : filter;
 
-      const [data] = await Promise.all([
+      const [data, stats] = await Promise.all([
         taskService.getTasks(status),
-        new Promise((resolve) => setTimeout(resolve, 500)),
+        taskService.getStatistics(),
       ]);
 
+      // Delay para mejorar la UX
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       setTasks(data);
+      setStatistics(stats);
     } catch (error) {
       console.error("Error fetching tasks:", error);
     } finally {
@@ -58,9 +67,19 @@ export default function Tasks() {
     }
   }, [filter]);
 
+  const updateStatistics = async () => {
+    try {
+      const stats = await taskService.getStatistics();
+      setStatistics(stats);
+    } catch (error) {
+      console.error("Error fetching statistics:", error);
+    }
+  };
+
   const handleCreateTask = async (taskData: Partial<Task>) => {
     try {
       await taskService.createTask(taskData);
+      await updateStatistics();
       fetchTasks(false);
       setShowForm(false);
     } catch (error) {
@@ -71,6 +90,7 @@ export default function Tasks() {
   const handleUpdateTask = async (id: string, taskData: Partial<Task>) => {
     try {
       await taskService.updateTask(id, taskData);
+      await updateStatistics();
       fetchTasks(false);
       setEditingTask(null);
     } catch (error) {
@@ -83,6 +103,7 @@ export default function Tasks() {
 
     try {
       await taskService.deleteTask(id);
+      await updateStatistics();
       fetchTasks(false);
     } catch (error) {
       console.error("Error deleting task:", error);
@@ -106,6 +127,8 @@ export default function Tasks() {
       });
       // Enviar la actualización al servidor
       await taskService.updateTask(task.id, { status: newStatus });
+      // Actualizar estadísticas después de cambiar el estado
+      await updateStatistics();
     } catch (error) {
       // Si hay error, revertir el cambio local
       console.error("Error updating task status:", error);
@@ -198,7 +221,7 @@ export default function Tasks() {
                     : "bg-white text-gray-700 hover:bg-gray-50"
                 }`}
               >
-                All
+                All ({statistics.total})
               </button>
               <button
                 onClick={() => setFilter("PENDING")}
@@ -208,7 +231,7 @@ export default function Tasks() {
                     : "bg-white text-gray-700 hover:bg-gray-50"
                 }`}
               >
-                Pending
+                Pending ({statistics.pending})
               </button>
               <button
                 onClick={() => setFilter("COMPLETED")}
@@ -218,7 +241,7 @@ export default function Tasks() {
                     : "bg-white text-gray-700 hover:bg-gray-50"
                 }`}
               >
-                Completed
+                Completed ({statistics.completed})
               </button>
             </div>
 
