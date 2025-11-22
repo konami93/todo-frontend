@@ -35,16 +35,6 @@ VITE_API_URL=http://localhost:3000/api
 
 **Note:** Replace `http://localhost:3000/api` with your backend API URL.
 
-### Option 2: System Environment Variable
-
-You can also configure the environment variable directly in your system before running the application.
-
-**Windows (PowerShell):**
-```powershell
-$env:VITE_API_URL="http://localhost:3000/api"
-npm run dev
-```
-
 **Linux/Mac:**
 ```bash
 export VITE_API_URL=http://localhost:3000/api
