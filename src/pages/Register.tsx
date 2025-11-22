@@ -32,7 +32,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(formData);
-      navigate("/dashboard");
+      navigate("/tasks");
     } catch (err: any) {
       setError(err.response?.data?.message || "Something went wrong");
     } finally {

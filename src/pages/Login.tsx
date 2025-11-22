@@ -17,7 +17,7 @@ function Login() {
 
     try {
       await login({ email, password });
-      navigate("/dashboard");
+      navigate("/tasks");
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");
     } finally {
